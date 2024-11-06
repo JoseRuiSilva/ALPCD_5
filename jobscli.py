@@ -2,6 +2,7 @@ from typing import Optional
 import requests
 import typer
 from typing_extensions import Annotated
+from bs4 import BeautifulSoup
 
 app = typer.Typer()
 list_results = []
@@ -14,28 +15,12 @@ def pedido(limit, page):
     res = requests.request("GET", url, headers=headers, data=payload)
     if res.status_code == 200:  # Verificar se o acesso foi bem sucedido (200 OK)
         results = res.json()
+        soup = BeautifulSoup(results, "lxml")
         return results
     else:
         print(f"Erro {res.status_code} - {res.text}")
         return {}
-
-# Comando para obter os n trabalhos publicados mais recentes
-@app.command()
-def top(n: Annotated[Optional[int], typer.Argument()] = None):  # Chama o número de trabalhos a escolher n
-    if not list_results:
-        fetch_data()
-    if n is None:  # Nenhum n selecionado, portanto assume o valor padrão None
-        return
-    else:
-        sorted_results = sorted(list_results, key=lambda x: x["publishedAt"], reverse=True)  # Ordena a lista de resultados pela data de publicação
-        print(sorted_results[:n])  # Devolve os n primeiros valores da lista
-
-@app.command()      #só para aparecerem os comandos (preciasa de pelo menos dois) (não faz nada importante)
-def mayb_is_this(name:str):
-    if name:
-        print(f"Helo {name}")       #diz ola ao nome dado
-
-
+    
 def fetch_data():
     global list_results  # Para ser acessado dentro de outras funções
     limit = 100
@@ -54,6 +39,22 @@ def fetch_data():
 
     response["results"] = list_results  # Finalmente cria o 'response' com todos os resultados
     print("Finalizado.")
+
+# Comando para obter os n trabalhos publicados mais recentes
+@app.command()
+#a)
+def top(n: int):  # Chama o número de trabalhos a escolher n
+    if not list_results:
+        fetch_data()
+
+    sorted_results = sorted(list_results, key=lambda x: x["publishedAt"], reverse=True)  # Ordena a lista de resultados pela data de publicação
+    print(sorted_results[:n])  # Devolve os n primeiros valores da lista
+
+@app.command()      #só para aparecerem os comandos (preciasa de pelo menos dois) (não faz nada importante)
+def search(localizacao:str, nome_empresa:str, num_trabalhos:int):
+    if not list_results:
+        fetch_data()
+    
 
 if __name__ == "__main__":
     app()  # Executa a app Typer
