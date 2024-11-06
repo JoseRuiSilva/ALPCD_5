@@ -2,7 +2,6 @@ from typing import Optional
 import requests
 import typer
 from typing_extensions import Annotated
-from bs4 import BeautifulSoup
 
 app = typer.Typer()
 list_results = []
