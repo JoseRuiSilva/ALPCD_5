@@ -15,7 +15,6 @@ def pedido(limit, page):
     res = requests.request("GET", url, headers=headers, data=payload)
     if res.status_code == 200:  # Verificar se o acesso foi bem sucedido (200 OK)
         results = res.json()
-        soup = BeautifulSoup(results, "lxml")
         return results
     else:
         print(f"Erro {res.status_code} - {res.text}")
@@ -50,7 +49,8 @@ def top(n: int):  # Chama o número de trabalhos a escolher n
     sorted_results = sorted(list_results, key=lambda x: x["publishedAt"], reverse=True)  # Ordena a lista de resultados pela data de publicação
     print(sorted_results[:n])  # Devolve os n primeiros valores da lista
 
-@app.command()      #só para aparecerem os comandos (preciasa de pelo menos dois) (não faz nada importante)
+#b)
+@app.command()
 def search(localizacao:str, nome_empresa:str, num_trabalhos:int):
     if not list_results:
         fetch_data()
