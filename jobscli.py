@@ -50,10 +50,15 @@ def top(n: int):  # Chama o número de trabalhos a escolher n
 
 #b)
 @app.command()
-def search(localizacao:str, nome_empresa:str, num_trabalhos:int):
+def search(company_location:str, company_name:str, n_jobs:int):
     if not list_results:
         fetch_data()
-    
+
+#d)
+@app.command()
+def skills(skills:str, nome_empresa:str, num_trabalhos:int):
+    if not list_results:
+        fetch_data()
 
 if __name__ == "__main__":
     app()  # Executa a app Typer
