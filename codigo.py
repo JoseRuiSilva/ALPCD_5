@@ -152,3 +152,6 @@ def skills(skills: str, nome_empresa: str, num_trabalhos: int):
 
 if __name__ == "__main__":
     app()  # Executa a app Typer
+
+
+
