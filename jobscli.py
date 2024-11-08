@@ -1,5 +1,4 @@
-from typing import Optional
-from typing import List
+from typing import Optional, List
 import requests
 import typer
 from typing_extensions import Annotated
@@ -10,6 +9,7 @@ from skillNer.general_params import SKILL_DB # type: ignore
 from skillNer.skill_extractor_class import SkillExtractor # type: ignore
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+import re
 
 app = typer.Typer()
 list_results = []
@@ -180,9 +180,9 @@ def salary(job_id: str):
 
 #d)
 @app.command()
-def skills(given_skills:str, start_date:str, end_date:str):
-    print(given_skills)
-    print(type(given_skills))
+def skills(given_skills:List[str], start_date:str, end_date:str):
+    lista = given_skills[0]
+    given_skills = lista[1:-1].split(',')
 
     if not list_results:
         fetch_data()
@@ -206,7 +206,6 @@ def skills(given_skills:str, start_date:str, end_date:str):
 
     results = process_jobs_concurrently(filtered_results, given_skills, skill_extractor, max_workers=8)
     print(results)
-    print(len(results))
 
     
 
