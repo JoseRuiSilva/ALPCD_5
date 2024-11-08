@@ -1,8 +1,8 @@
 from typing import Optional
-from typing import List
 import requests
 import typer
 from typing_extensions import Annotated
+from datetime import datetime
 
 app = typer.Typer()
 list_results = []
@@ -45,57 +45,58 @@ def fetch_data():
     response["results"] = list_results  # Finalmente cria o 'response' com todos os resultados
     print("Finalizado.")
 
-def filter_by_dates_results(list_results, start_date, end_date):
-    sorted_results = sorted(list_results, key=lambda x: x["updatedAt"], reverse=True)
-    filtered_results = []
-
-    for res in sorted_results:
-        update_date_str = res['updatedAt'][:10]
-        update_date = datetime.strptime(update_date_str, '%Y-%m-%d')
-        if start_date <= update_date <= end_date:
-            filtered_results.append(res)
-        elif update_date < start_date:
-            break
-
-    return filtered_results
-
-def process_job(res, given_skills, skill_extractor):
-    body = res['body']
-    try:
-        annotations = skill_extractor.annotate(body)
-    except (IndexError, ValueError) as e:
-        print(f"Erro a processar o 'body': {e}")
-        return None
-
-    anoted_skills = set(skill['doc_node_value'] for skill in annotations['results']['full_matches'])
-    anoted_skills.update(skill['doc_node_value'] for skill in annotations['results']['ngram_scored'])
-
-    if set(given_skills) & anoted_skills:   #PERGUNTAR AO PROFESSOR, se for todos as skills dadas all(item in annoted_skills for item in given_skills)
-        return res
-    return None
-
-def process_jobs_concurrently(list_of_results, given_skills, skill_extractor, max_workers=4):
-    results = []
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_res = {executor.submit(process_job, res, given_skills, skill_extractor): res for res in list_of_results}
-
-        for future in as_completed(future_to_res):
-            res = future.result()
-            if res:
-                results.append(res)
-
-    return results
-
 # Comando para obter os n trabalhos publicados mais recentes
 @app.command()
 def top(n: int):  # Chama o número de trabalhos a escolher n
     if not list_results:
         fetch_data()
 
-    sorted_results = sorted(list_results, key=lambda x: x["publishedAt"], reverse=True)  # Ordena a lista de resultados pela data de publicação
-    print(sorted_results[:n])  # Devolve os n primeiros valores da lista
+    # Ordena os resultados pela data de publicação, do mais recente para o mais antigo
+    sorted_results = sorted(list_results, key=lambda x: x["publishedAt"], reverse=True)
 
-#b)
+    # Se não houver trabalhos suficientes, o número de trabalhos será ajustado para o total disponível
+    num_results = min(n, len(sorted_results))
+
+    simplified_results = []
+    for job in sorted_results[:num_results]:
+        # Formatação da data de publicação para mostrar apenas "YYYY-MM-DD HH:MM"
+        published_at = job.get("publishedAt", "Não há informação")
+        if published_at != "Não há informação":
+            try:
+                # Converte a string da data para um objeto datetime
+                published_at = datetime.strptime(published_at, "%Y-%m-%d %H:%M:%S")
+                # Formata para "YYYY-MM-DD HH:MM"
+                published_at = published_at.strftime("%Y-%m-%d %H:%M")
+            except ValueError:
+                published_at = "Não há informação"
+
+        # Verifica todos os campos e substitui por "Não há informação" caso não existam ou sejam None
+        job_type = ", ".join([type["name"] for type in job.get("types", [])]) if job.get("types") else "Não há informação"
+
+        simplified_job = {
+            "Título": job.get("title", "Não há informação"),
+            "Empresa": job.get("company", {}).get("name", "Não há informação"),
+            "Data de Publicação": published_at,
+            "Salário": job.get("wage", "Não há informação") if job.get("wage") is not None else "Não há informação",
+            "Localização": ", ".join([loc["name"] for loc in job.get("locations", [])]) or "Não há informação",
+            "Tipo de Trabalho": job_type
+        }
+
+        # Formatação conforme pedido, com \n para quebra de linha
+        formatted_result = f"Título: {simplified_job['Título']}\n" \
+                           f"Empresa: {simplified_job['Empresa']}\n" \
+                           f"Data de Publicação: {simplified_job['Data de Publicação']}\n" \
+                           f"Salário: {simplified_job['Salário']}\n" \
+                           f"Localização: {simplified_job['Localização']}\n" \
+                           f"Tipo de Trabalho: {simplified_job['Tipo de Trabalho']}\n"
+
+        simplified_results.append(formatted_result)
+
+    # Exibe os resultados formatados
+    print("\n".join(simplified_results))
+
+
+# b)
 @app.command()
 def search(localidade: str, empresa: str, n_jobs: int):
     if not list_results:  # Se não há dados, faz a coleta
@@ -142,37 +143,12 @@ def search(localidade: str, empresa: str, n_jobs: int):
     # Exibe os resultados formatados
     print("\n".join(simplified_results))
 
-#d)
-@app.command()
-def skills(given_skills:str, start_date:str, end_date:str):
-    print(given_skills)
-    print(type(given_skills))
 
+# d)  Comando para buscar trabalhos por habilidades, empresa e número de trabalhos (não implementado completamente)
+@app.command()
+def skills(skills: str, nome_empresa: str, num_trabalhos: int):
     if not list_results:
         fetch_data()
-    
-    # Iniciar o skill extractor
-    nlp = spacy.load("en_core_web_lg")
-    skill_extractor = SkillExtractor(nlp, SKILL_DB, PhraseMatcher)
-
-    try:
-        start_date = datetime.strptime(start_date, '%Y-%m-%d')
-        end_date = datetime.strptime(end_date, '%Y-%m-%d')
-    except ValueError:
-        print("Erro ao ler as datas, verifique se estas existem.")
-        return {}
-    
-    if end_date < start_date:
-        print("Data final menor que inicial, a iniciar com valores trocados...")
-        filtered_results = filter_by_dates_results(list_results, end_date, start_date)
-    else:
-        filtered_results = filter_by_dates_results(list_results, start_date, end_date)
-
-    results = process_jobs_concurrently(filtered_results, given_skills, skill_extractor, max_workers=8)
-    print(results)
-    print(len(results))
-
-    
 
 if __name__ == "__main__":
     app()  # Executa a app Typer
