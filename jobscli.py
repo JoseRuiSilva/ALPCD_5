@@ -98,10 +98,12 @@ def top(n: int):  # Chama o número de trabalhos a escolher n
 
 #d)
 @app.command()
-def skills(given_skills:List[str], start_date:str, end_date:str):
+def skills(given_skills:str, start_date:str, end_date:str):
+    print(given_skills)
+    print(type(given_skills))
+
     if not list_results:
         fetch_data()
-
     
     # Iniciar o skill extractor
     nlp = spacy.load("en_core_web_lg")
@@ -122,6 +124,7 @@ def skills(given_skills:List[str], start_date:str, end_date:str):
 
     results = process_jobs_concurrently(filtered_results, given_skills, skill_extractor, max_workers=8)
     print(results)
+    print(len(results))
 
     
 
