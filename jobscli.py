@@ -3,6 +3,12 @@ from typing import List
 import requests
 import typer
 from typing_extensions import Annotated
+import spacy
+from spacy.matcher import PhraseMatcher
+from skillNer.general_params import SKILL_DB
+from skillNer.skill_extractor_class import SkillExtractor
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 
 app = typer.Typer()
 list_results = []
