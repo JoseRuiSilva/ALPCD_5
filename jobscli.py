@@ -152,8 +152,7 @@ def search(localidade: str, empresa: str, n_jobs: int, export: Optional[bool] = 
 
     # Limita os resultados ao número solicitado (n_jobs)
     filtered_jobs = filtered_jobs[:n_jobs]
-    print(filtered_jobs[:n_jobs])
-    print(len(filtered_jobs[:n_jobs]))
+
     # Simplifica os resultados para exibir as informações desejadas
     simplified_results = []
     for job in filtered_jobs:
