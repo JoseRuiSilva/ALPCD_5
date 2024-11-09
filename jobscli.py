@@ -5,11 +5,12 @@ from typing_extensions import Annotated
 import re
 import spacy
 from spacy.matcher import PhraseMatcher
-from skillNer.general_params import SKILL_DB # type: ignore
-from skillNer.skill_extractor_class import SkillExtractor # type: ignore
+#from skillNer.general_params import SKILL_DB # type: ignore
+#from skillNer.skill_extractor_class import SkillExtractor # type: ignore
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import re
+import csv
 
 app = typer.Typer()
 list_results = []
@@ -29,6 +30,26 @@ def pedido(limit, page, job_id = None):
     else:
         print(f"Erro {res.status_code} - {res.text}")
         return {}
+
+# Função para exportar dados para CSV
+def export_to_csv(data, filename):
+    with open(filename, 'w+', newline='\n',encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile, delimiter=',')
+        # Cabeçalho do CSV
+        writer.writerow(["titulo", "empresa", "descricao", "data_publicacao", "salario", "localizacao"])
+        
+        # Escrevendo as linhas de dados
+        for item in data:
+            titulo = item["title"]
+            empresa = item["company"]["name"]
+            descricao = re.sub(r'<[^>]*>', '', item["body"])
+            data_publicacao = item["publishedAt"]
+            salario = item["wage"]
+            try:
+                localizacao = ", ".join(loc["name"] for loc in item["locations"])
+            except:
+                localizacao = "Não há informação"
+            writer.writerow([titulo, empresa, descricao, data_publicacao, salario, localizacao])
 
 def fetch_data():
     global list_results  # Para ser acessado dentro de outras funções
@@ -98,16 +119,19 @@ def process_jobs_concurrently(list_of_results, given_skills, skill_extractor, ma
 
 # Comando para obter os n trabalhos publicados mais recentes
 @app.command()
-def top(n: int):  # Chama o número de trabalhos a escolher n
+def top(n: int, export: Optional[bool] = False):  # Chama o número de trabalhos a escolher n
     if not list_results:
         fetch_data()
 
     sorted_results = sorted(list_results, key=lambda x: x["publishedAt"], reverse=True)  # Ordena a lista de resultados pela data de publicação
     print(sorted_results[:n])  # Devolve os n primeiros valores da lista
-
+    
+    if export:
+        export_to_csv(sorted_results[:n], "top_jobs.csv")
+        print("Dados exportados para top_jobs.csv")
 #b)
 @app.command()
-def search(localidade: str, empresa: str, n_jobs: int):
+def search(localidade: str, empresa: str, n_jobs: int, export: Optional[bool] = False):
     if not list_results:  # Se não há dados, faz a coleta
         fetch_data()
 
@@ -151,6 +175,10 @@ def search(localidade: str, empresa: str, n_jobs: int):
 
     # Exibe os resultados formatados
     print("\n".join(simplified_results))
+    
+    if export:
+        export_to_csv(filtered_jobs, "search.csv")
+        print("Dados exportados para top_jobs.csv")
 
 #c)
 @app.command()
@@ -180,7 +208,7 @@ def salary(job_id: str):
 
 #d)
 @app.command()
-def skills(given_skills:List[str], start_date:str, end_date:str):
+def skills(given_skills:List[str], start_date:str, end_date:str, export: Optional[bool] = False):
     lista = given_skills[0]
     given_skills = lista[1:-1].split(',')
 
@@ -207,6 +235,9 @@ def skills(given_skills:List[str], start_date:str, end_date:str):
     results = process_jobs_concurrently(filtered_results, given_skills, skill_extractor, max_workers=8)
     print(results)
 
+    if export:
+        export_to_csv(results, "skills.csv")
+        print("Dados exportados para top_jobs.csv")
     
 
 if __name__ == "__main__":
