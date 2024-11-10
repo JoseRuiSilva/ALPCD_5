@@ -119,19 +119,25 @@ def process_jobs_concurrently(list_of_results, given_skills, skill_extractor, ma
 
 # Comando para obter os n trabalhos publicados mais recentes
 @app.command()
-def top(n: int, export: Optional[bool] = False):  # Chama o número de trabalhos a escolher n
+def top(n_jobs: Annotated[int, typer.Argument(help="Número de trabalhos")], export: Optional[bool] = False):  # Chama o número de trabalhos a escolher n
+    """
+    Obtém os últimos trabalhos publicados.
+    """
     if not list_results:
         fetch_data()
 
     sorted_results = sorted(list_results, key=lambda x: x["publishedAt"], reverse=True)  # Ordena a lista de resultados pela data de publicação
-    print(sorted_results[:n])  # Devolve os n primeiros valores da lista
+    print(sorted_results[:n_jobs])  # Devolve os n primeiros valores da lista
     
     if export:
-        export_to_csv(sorted_results[:n], "top_jobs.csv")
+        export_to_csv(sorted_results[:n_jobs], "top_jobs.csv")
         print("Dados exportados para top_jobs.csv")
 #b)
 @app.command()
-def search(localidade: str, empresa: str, n_jobs: int, export: Optional[bool] = False):
+def search(localidade: Annotated[str, typer.Argument(help="Localidade a procurar")], empresa: Annotated[str, typer.Argument(help="Empresa do trabalho")], n_jobs: Annotated[int, typer.Argument(help="Número de trabalhos")], export: Optional[bool] = False):
+    """
+    Obtém os trabalhos 'full-time' numa empresa, numa localidade.
+    """
     if not list_results:  # Se não há dados, faz a coleta
         fetch_data()
 
@@ -174,6 +180,7 @@ def search(localidade: str, empresa: str, n_jobs: int, export: Optional[bool] = 
         simplified_results.append(formatted_result)
 
     # Exibe os resultados formatados
+    print(filtered_jobs)
     print("\n".join(simplified_results))
     
     if export:
@@ -182,7 +189,10 @@ def search(localidade: str, empresa: str, n_jobs: int, export: Optional[bool] = 
 
 #c)
 @app.command()
-def salary(job_id: str):
+def salary(job_id: Annotated[str, typer.Argument(help="Id do trabalho")]):
+    """
+    Obtém o salário dum trabalho.
+    """
     # Usar a função com retentativa para obter os detalhes do job
     job_data = pedido(100,1,job_id)
     
@@ -208,7 +218,10 @@ def salary(job_id: str):
 
 #d)
 @app.command()
-def skills(given_skills:List[str], start_date:str, end_date:str, export: Optional[bool] = False):
+def skills(given_skills:Annotated[List[str], typer.Argument(help="Competências a procurar '[skill1,skill2,...]'")], start_date:Annotated[str, typer.Argument(help="Início (yyyy-mm-dd HH:MM:SS)")], end_date:Annotated[str, typer.Argument(help="Fim (yyyy-mm-dd HH:MM:SS)")], export: Optional[bool] = False):
+    """
+    Obtém os trabalhos que seguem pede certas competências atualizadas no intervalo dado.
+    """
     # Transforma as skills dadas numa lista de skills com valores em minusculas
     joined_skills = ' '.join(given_skills).lower()
     given_skills = re.findall(r'[^\[\],\s]+', joined_skills)
