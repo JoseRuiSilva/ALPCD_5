@@ -5,11 +5,12 @@ from typing_extensions import Annotated
 import re
 import spacy
 from spacy.matcher import PhraseMatcher
-from skillNer.general_params import SKILL_DB
-from skillNer.skill_extractor_class import SkillExtractor
+from skillNer.general_params import SKILL_DB # type: ignore
+from skillNer.skill_extractor_class import SkillExtractor # type: ignore
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import re
+import csv
 
 app = typer.Typer()
 list_results = []
@@ -30,13 +31,33 @@ def pedido(limit, page, job_id = None):
         print(f"Erro {res.status_code} - {res.text}")
         return {}
 
+# Função para exportar dados para CSV
+def export_to_csv(data, filename):
+    with open(filename, 'w+', newline='\n',encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile, delimiter=',')
+        # Cabeçalho do CSV
+        writer.writerow(["titulo", "empresa", "descricao", "data_publicacao", "salario", "localizacao"])
+        
+        # Escreve as linhas de dados
+        for item in data:
+            titulo = item["title"]
+            empresa = item["company"]["name"]
+            descricao = re.sub(r'<[^>]*>', '', item["body"])
+            data_publicacao = item["publishedAt"]
+            salario = item["wage"]
+            try:
+                localizacao = ", ".join(loc["name"] for loc in item["locations"])
+            except:
+                localizacao = "Não há informação"
+            writer.writerow([titulo, empresa, descricao, data_publicacao, salario, localizacao])
+
 def fetch_data():
     global list_results  # Para ser acessado dentro de outras funções
     limit = 100
     page = 1
     response = pedido(limit, page)
 
-    # Verifica se a resposta contém a chave 'results'
+    # Verifica se a resposta contém a chave 'results' ou se não há resposta
     if not response or "results" not in response:
         print("Nenhum resultado encontrado na resposta da API.")
         return
@@ -55,18 +76,18 @@ def fetch_data():
     response["results"] = list_results  # Finalmente cria o 'response' com todos os resultados
     print("Finalizado.")
 
-def filter_by_dates_results(list_results, start_date, end_date):
-    sorted_results = sorted(list_results, key=lambda x: x["updatedAt"], reverse=True)
+def filter_by_dates_results(list_results, start_date, end_date):    # Função para o d), devolve resultados num intervalo
+    sorted_results = sorted(list_results, key=lambda x: x["updatedAt"], reverse=True)   # Organiza os resultados de maior para menor data de atualizacao
     filtered_results = []
 
     for res in sorted_results:
-        update_date_str = res['updatedAt'][:10]
-        update_date = datetime.strptime(update_date_str, '%Y-%m-%d')
-        if start_date <= update_date <= end_date:
+        update_date_str = res['updatedAt']
+        update_date = datetime.strptime(update_date_str, '%Y-%m-%d %H:%M:%S')
+        if update_date <= end_date:   #  Enquanto a data de atualizacao for menor do que a data final, acrescenta ao resultado final
             filtered_results.append(res)
-        elif update_date < start_date:
+        if update_date < start_date:  # Quando for menor que a data inicial, devido ao sort, podemos parar porque não há mais resultados que queiramos
             break
-
+    print(f"A analisar {len(filtered_results)} resultados no intervalo dado.")
     return filtered_results
 
 def process_job(res, given_skills, skill_extractor):
@@ -77,10 +98,10 @@ def process_job(res, given_skills, skill_extractor):
         print(f"Erro a processar o 'body': {e}")
         return None
 
-    anoted_skills = set(skill['doc_node_value'] for skill in annotations['results']['full_matches'])
-    anoted_skills.update(skill['doc_node_value'] for skill in annotations['results']['ngram_scored'])
+    annoted_skills = [skill['doc_node_value'].lower() for skill in annotations['results']['full_matches']]
+    annoted_skills += [skill['doc_node_value'].lower() for skill in annotations['results']['ngram_scored']]
 
-    if set(given_skills) & anoted_skills:   #PERGUNTAR AO PROFESSOR, se for todos as skills dadas all(item in annoted_skills for item in given_skills)
+    if all(item in annoted_skills for item in given_skills):    #set(given_skills) & set(annoted_skills):
         return res
     return None
 
@@ -98,16 +119,25 @@ def process_jobs_concurrently(list_of_results, given_skills, skill_extractor, ma
 
 # Comando para obter os n trabalhos publicados mais recentes
 @app.command()
-def top(n: int):  # Chama o número de trabalhos a escolher n
+def top(n_jobs: Annotated[int, typer.Argument(help="Número de trabalhos")], export: Optional[bool] = False):  # Chama o número de trabalhos a escolher n
+    """
+    Obtém os últimos trabalhos publicados.
+    """
     if not list_results:
         fetch_data()
 
     sorted_results = sorted(list_results, key=lambda x: x["publishedAt"], reverse=True)  # Ordena a lista de resultados pela data de publicação
-    print(sorted_results[:n])  # Devolve os n primeiros valores da lista
-
+    print(sorted_results[:n_jobs])  # Devolve os n primeiros valores da lista
+    
+    if export:
+        export_to_csv(sorted_results[:n_jobs], "top_jobs.csv")
+        print("Dados exportados para top_jobs.csv")
 #b)
 @app.command()
-def search(localidade: str, empresa: str, n_jobs: int):
+def search(localidade: Annotated[str, typer.Argument(help="Localidade a procurar")], empresa: Annotated[str, typer.Argument(help="Empresa do trabalho")], n_jobs: Annotated[int, typer.Argument(help="Número de trabalhos")], export: Optional[bool] = False):
+    """
+    Obtém os trabalhos 'full-time' numa empresa, numa localidade.
+    """
     if not list_results:  # Se não há dados, faz a coleta
         fetch_data()
 
@@ -123,10 +153,10 @@ def search(localidade: str, empresa: str, n_jobs: int):
     if not filtered_jobs:
         print("Não há trabalhos disponíveis para essa pesquisa.")
         return
-
+    
     # Limita os resultados ao número solicitado (n_jobs)
     filtered_jobs = filtered_jobs[:n_jobs]
-    
+
     # Simplifica os resultados para exibir as informações desejadas
     simplified_results = []
     for job in filtered_jobs:
@@ -150,11 +180,19 @@ def search(localidade: str, empresa: str, n_jobs: int):
         simplified_results.append(formatted_result)
 
     # Exibe os resultados formatados
+    print(filtered_jobs)
     print("\n".join(simplified_results))
+    
+    if export:
+        export_to_csv(filtered_jobs, "search.csv")
+        print("Dados exportados para top_jobs.csv")
 
 #c)
 @app.command()
-def salary(job_id: str):
+def salary(job_id: Annotated[str, typer.Argument(help="Id do trabalho")]):
+    """
+    Obtém o salário dum trabalho.
+    """
     # Usar a função com retentativa para obter os detalhes do job
     job_data = pedido(100,1,job_id)
     
@@ -168,7 +206,7 @@ def salary(job_id: str):
         print(f"Salário encontrado: {wage}")
     else:
         # Caso wage esteja vazio ou seja None, procurar por valores salariais em outros campos
-        description = job_data.get("description", "")
+        description = job_data.get("body", "")
         matches = re.findall(r"\b\d{1,3}(?:\.\d{3})*(?:,\d{2})?\b", description)
         
         if matches:
@@ -180,9 +218,13 @@ def salary(job_id: str):
 
 #d)
 @app.command()
-def skills(given_skills:List[str], start_date:str, end_date:str):
-    lista = given_skills[0]
-    given_skills = lista[1:-1].split(',')
+def skills(given_skills:Annotated[List[str], typer.Argument(help="Competências a procurar '[skill1,skill2,...]'")], start_date:Annotated[str, typer.Argument(help="Início (yyyy-mm-dd HH:MM:SS)")], end_date:Annotated[str, typer.Argument(help="Fim (yyyy-mm-dd HH:MM:SS)")], export: Optional[bool] = False):
+    """
+    Obtém os trabalhos que seguem pede certas competências atualizadas no intervalo dado.
+    """
+    # Transforma as skills dadas numa lista de skills com valores em minusculas
+    joined_skills = ' '.join(given_skills).lower()
+    given_skills = re.findall(r'[^\[\],\s]+', joined_skills)
 
     if not list_results:
         fetch_data()
@@ -191,22 +233,32 @@ def skills(given_skills:List[str], start_date:str, end_date:str):
     nlp = spacy.load("en_core_web_lg")
     skill_extractor = SkillExtractor(nlp, SKILL_DB, PhraseMatcher)
 
+    start_date, end_date = start_date.replace(' ',''), end_date.replace(' ','')
+
+    if end_date < start_date:
+        print(f"Data final menor que inicial, a iniciar com valores trocados...")
+        start_date, end_date = end_date, start_date
+
+    if len(start_date) == 10:
+        start_date += " 00:00:01"
+    if len(end_date) == 10:
+        end_date += " 23:59:59"
+
     try:
-        start_date = datetime.strptime(start_date, '%Y-%m-%d')
-        end_date = datetime.strptime(end_date, '%Y-%m-%d')
+        start_date = datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S')
+        end_date = datetime.strptime(end_date, '%Y-%m-%d %H:%M:%S')
     except ValueError:
         print("Erro ao ler as datas, verifique se estas existem.")
         return {}
     
-    if end_date < start_date:
-        print("Data final menor que inicial, a iniciar com valores trocados...")
-        filtered_results = filter_by_dates_results(list_results, end_date, start_date)
-    else:
-        filtered_results = filter_by_dates_results(list_results, start_date, end_date)
+    filtered_results = filter_by_dates_results(list_results, start_date, end_date)
 
     results = process_jobs_concurrently(filtered_results, given_skills, skill_extractor, max_workers=8)
     print(results)
 
+    if export:
+        export_to_csv(results, "skills.csv")
+        print("Dados exportados para top_jobs.csv")
     
 
 if __name__ == "__main__":
