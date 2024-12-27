@@ -285,6 +285,87 @@ def skills(given_skills:Annotated[List[str], typer.Argument(help="Competências 
         print("Dados exportados para skills.csv")
     
 #TP2
+#a)
+from bs4 import BeautifulSoup
+
+@app.command()
+def get(job_id: Annotated[int, typer.Argument(help="ID do trabalho")]):
+    """
+    Busca informações de uma vaga específica (jobID) e enriquece com dados da empresa do AmbitionBox.
+    """
+
+    # 1. Obter dados da vaga usando a API
+    job_data = pedido(limit=100, page=1, job_id=job_id)
+    if not job_data:
+        print(f"Não foi possível encontrar o jobID {job_id}. Verifique se o ID é válido.")
+        return
+
+    # 2. Recolher o nome da empresa para buscar dados no AmbitionBox
+    company_name = job_data.get("company", {}).get("name", "Desconhecida")
+    if company_name == "Desconhecida":
+        print("Não foi possível obter o nome da empresa.")
+        return
+
+    # 3. Fazer Web Scraping no AmbitionBox
+    ambitionbox_url = f"https://www.ambitionbox.com/overview/{company_name.replace(' ', '-').lower()}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Gecko/20100101 Firefox/98.0"
+    }
+    response = requests.get(ambitionbox_url, headers=headers)
+
+    if response.status_code != 200:
+        print(f"Erro ao acessar o AmbitionBox para a empresa '{company_name}'.")
+        return
+
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    # 4. Extrair dados relevantes (ajuste os seletores conforme o HTML do AmbitionBox)
+    try:
+        rating = soup.select_one(".rating-value").text.strip()
+        description = soup.select_one(".company-description").text.strip()
+        benefits = soup.select_one(".company-benefits").text.strip()
+    except AttributeError:
+        print("Não foi possível encontrar informações adicionais no AmbitionBox.")
+        rating, description, benefits = "N/A", "N/A", "N/A"
+
+    # 5. Combinar dados e exibir como JSON
+    enriched_data = {
+        "id": job_id,
+        "title": job_data.get("title", "N/A"),
+        "company_name": company_name,
+        "rating": rating,
+        "description": description,
+        "benefits": benefits,
+    }
+
+    print("Dados do Job:")
+    print(json.dumps(enriched_data, indent=4, ensure_ascii=False))
+
+#b)
+@app.command()
+def statistics():
+    """
+    Gera estatísticas de vagas agrupadas por Zona e Tipo de Trabalho em um CSV.
+    """
+    if not list_results:
+        fetch_data()
+
+    # Agrupando vagas por zona e tipo de trabalho
+    stats = {}
+    for job in list_results:
+        zone = ", ".join(loc["name"] for loc in job.get("locations", [])) or "Desconhecida"
+        job_type = ", ".join(t["name"] for t in job.get("types", [])) or "Desconhecido"
+        key = (zone, job_type)
+        stats[key] = stats.get(key, 0) + 1
+
+    filename = "job_statistics.csv"
+    with open(filename, "w", newline="", encoding="utf-8") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["Zona", "Tipo de Trabalho", "Número de Vagas"])
+        for (zone, job_type), count in stats.items():
+            writer.writerow([zone, job_type, count])
+
+    print(f"Ficheiro '{filename}' criado com sucesso.")
 #c)
 @app.command()
 def list_skills(search:Annotated[str, typer.Argument(help="Profissão a procurar")], export: Optional[bool] = False):
