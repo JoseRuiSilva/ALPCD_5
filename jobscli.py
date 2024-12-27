@@ -3,10 +3,10 @@ import requests
 import typer
 from typing_extensions import Annotated
 import re
-import spacy
-from spacy.matcher import PhraseMatcher
-from skillNer.general_params import SKILL_DB # type: ignore
-from skillNer.skill_extractor_class import SkillExtractor # type: ignore
+#import spacy
+#from spacy.matcher import PhraseMatcher
+#from skillNer.general_params import SKILL_DB # type: ignore
+#from skillNer.skill_extractor_class import SkillExtractor # type: ignore
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import re
@@ -45,6 +45,25 @@ def export_to_csv(data, filename):
             except:
                 localizacao = "Não há informação"
             writer.writerow([titulo, empresa, descricao, data_publicacao, salario, localizacao])
+
+def export_to_csv2(data, filename):
+    with open(filename, 'w', newline='\n',encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile, delimiter=',')
+
+        if type(data) == list:
+            e = data
+        else:
+            e = [data]
+
+        header = list(e[0].keys())
+
+        writer.writerow(header)
+        
+        for element in e:
+            values = []
+            for value in element.values():
+                values.append(value)
+            writer.writerow(values)
 
 def fetch_data():
     global list_results  # Para ser acessado dentro de outras funções
@@ -183,7 +202,7 @@ def search(localidade: Annotated[str, typer.Argument(help="Localidade a procurar
     
     if export:
         export_to_csv(filtered_jobs, "search.csv")
-        print("Dados exportados para top_jobs.csv")
+        print("Dados exportados para search.csv")
 
 #c)
 @app.command()
@@ -258,16 +277,59 @@ def skills(given_skills:Annotated[List[str], typer.Argument(help="Competências 
 
     if export:
         export_to_csv(results, "skills.csv")
-        print("Dados exportados para top_jobs.csv")
+        print("Dados exportados para skills.csv")
     
 #TP2
 #c)
+@app.command()
+def list_skills(search:Annotated[str, typer.Argument(help="Profissão a procurar")], export: Optional[bool] = False):
+    """
+    Obtém o top10 de competências mais requisitadas para a profissão dada.
+    """
+    search = search.lower().strip()
+    final_search = re.sub(r'\s+', '-', search)
+    url = f"https://www.ambitionbox.com/servicegateway-ambitionbox/jobs-services/v0/jobs/meta?jobProfile={final_search}&pageName=profileJobs"
+    headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:98.0) Gecko/20100101 Firefox/98.0",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Accept-Encoding": "gzip, deflate",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Cache-Control": "max-age=0",
+    "AppId": "931",
+    "SystemId":"ambitionbox-jobs-services"
+    }
 
+    jobProfile = request(url, headers)
+    jobProfileIds = jobProfile["data"]["jobProfileIds"]
+    if jobProfileIds != []:
+        skills = []
 
-#e)
+        for id in jobProfileIds:
+            url = f"https://www.ambitionbox.com/servicegateway-ambitionbox/jobs-services/v0/jobs/filters?profileIds={id}&isFilterApplied=true"
+            skills += request(url, headers)["filters"]["skills"][:10]
 
+        if len(jobProfileIds) > 1:
+            sorted_skills = sorted(skills, key=lambda x: x['count'], reverse=True)
+            skills = sorted_skills[:10]
 
+        final_skills = []
+        for element in skills:
+            skill = element['name']
+            count = element['count']
+            final_skills.append({'skill':skill,'count':count})
 
+        print(final_skills)
+        if export:
+            export_to_csv2(final_skills, "final_skills.csv")
+            print("Dados exportados para final_skills.csv")
+    else:
+        print("Profissão inexistente em lista.")
 
 
 if __name__ == "__main__":
