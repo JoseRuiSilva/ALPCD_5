@@ -10,7 +10,14 @@ from skillNer.skill_extractor_class import SkillExtractor # type: ignore
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import re
+import sys
 import csv
+from bs4 import BeautifulSoup
+from argparse import ArgumentParser
+import argparse
+import json
+
+
 
 app = typer.Typer()
 list_results = []
@@ -29,7 +36,12 @@ def pedido(limit, page, job_id = None):
         return results
     else:
         print(f"Erro {res.status_code} - {res.text}")
-        return {}
+        return {
+        "id": job_id,
+        "title": "Exemplo de Vaga",
+        "company": {"name": "Google"}
+    }
+
 
 # Função para exportar dados para CSV
 def export_to_csv(data, filename):
@@ -260,6 +272,70 @@ def skills(given_skills:Annotated[List[str], typer.Argument(help="Competências 
         export_to_csv(results, "skills.csv")
         print("Dados exportados para top_jobs.csv")
     
+# PARTE 2 DO PROJETOOO
+
+def get(job_id: int):
+
+    # 1. Obter dados da vaga usando a API
+    job_data = pedido(limit=100, page=1, job_id=job_id)
+    if not job_data:
+        print(f"Não foi possível encontrar o jobID {job_id}. Verifique se o ID é válido.")
+        return
+
+    # 2. Recolher o nome da empresa para buscar dados no LinkedIn
+    company_name = job_data.get("company", {}).get("name", "Desconhecida")
+    if company_name == "Desconhecida":
+        print("Não foi possível obter o nome da empresa.")
+        return
+
+    # 3. Fazer Web Scraping no LinkedIn
+    linkedin_url = f"https://www.comparably.com/companies/{company_name}.replace(' ', '-','+').lower()"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Gecko/20100101 Firefox/98.0"
+    }
+    response = requests.get(linkedin_url, headers=headers)
+
+    if response.status_code != 200:
+        print(f"Erro ao acessar para a empresa '{company_name}'.")
+        return 
+
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+     # falta ir buscar estes seletores
+    try:
+        rating = soup.select_one(".rating-class")  
+        description = soup.select_one(".company-description")  
+        benefits_section = soup.select(".statistics-class") 
+
+        rating = rating.text.strip() if rating else None
+        description = description.text.strip() if description else "Not available"
+        benefits = [benefit.text.strip() for benefit in benefits_section] if benefits_section else []
+
+    except AttributeError:
+        print("Não foi possível encontrar informações adicionais.")
+        rating, description, benefits = None, "Not available", []
+
+    # 5. Combinar dados e exibir como JSON
+    enriched_data = {
+        "id": job_id,
+        "title": job_data.get("title", "N/A"),
+        "company_name": company_name,
+        "linkedin_rating": rating,
+        "linkedin_description": description,
+        "linkedin_benefits": benefits,
+    }
+
+    print("Dados do job:")
+    print(json.dumps(enriched_data, indent=4, ensure_ascii=False))
 
 if __name__ == "__main__":
-    app()  # Executa a app Typer
+    if len(sys.argv) < 3 or sys.argv[1] != "get":
+        print("Usage: python jobscli.py get <jobID>")
+        sys.exit(1)
+
+    try:
+        job_id = int(sys.argv[2])  # Converte o jobID para inteiro
+        get(job_id)  # Chama a função correta
+    except ValueError:
+        print("O jobID deve ser um número inteiro.")
+        sys.exit(1)
