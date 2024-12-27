@@ -4,13 +4,8 @@ import requests
 import typer
 from typing_extensions import Annotated
 import re
-<<<<<<< HEAD
-import spacy
-from spacy.matcher import PhraseMatcher
-=======
 #import spacy
 #from spacy.matcher import PhraseMatcher
->>>>>>> 06961a4b2ead745ea2032e5276c7e29b08f2b144
 #from skillNer.general_params import SKILL_DB # type: ignore
 #from skillNer.skill_extractor_class import SkillExtractor # type: ignore
 from concurrent.futures import ThreadPoolExecutor, as_completed
