@@ -1,10 +1,16 @@
 from typing import Optional, List
+from bs4 import BeautifulSoup
 import requests
 import typer
 from typing_extensions import Annotated
 import re
+<<<<<<< HEAD
 import spacy
 from spacy.matcher import PhraseMatcher
+=======
+#import spacy
+#from spacy.matcher import PhraseMatcher
+>>>>>>> 06961a4b2ead745ea2032e5276c7e29b08f2b144
 #from skillNer.general_params import SKILL_DB # type: ignore
 #from skillNer.skill_extractor_class import SkillExtractor # type: ignore
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -16,17 +22,16 @@ app = typer.Typer()
 list_results = []
 
 # Função para aceder ao URL
-def pedido(limit, page, job_id = None):
-    if job_id:
-        url = f"https://api.itjobs.pt/job/get.json?api_key=ee176fa9456283ab9c42f357b036e236&id={job_id}"
-    else:
-        url = f"https://api.itjobs.pt/job/list.json?api_key=ee176fa9456283ab9c42f357b036e236&limit={limit}&page={page}"
+def request(url, headers, get_soup = False):
     payload = {}
-    headers = {'User-Agent': "ALPCD_5", 'Cookie': 'itjobs_pt=3cea3cc1f4c6a847f8c459367edf7143:94de45f2a55a15b2672adf8788ac8072e7bfd5c5'}  # Necessário por 'User-Agent' nos headers
     res = requests.request("GET", url, headers=headers, data=payload)
     if res.status_code == 200:  # Verificar se a resposta foi bem-sucedida (200 OK)
-        results = res.json()
-        return results
+        if get_soup:
+            soup = BeautifulSoup(res.text, "lxml")
+            return soup
+        else:
+            results = res.json()
+            return results
     else:
         print(f"Erro {res.status_code} - {res.text}")
         return {}
@@ -51,11 +56,32 @@ def export_to_csv(data, filename):
                 localizacao = "Não há informação"
             writer.writerow([titulo, empresa, descricao, data_publicacao, salario, localizacao])
 
+def export_to_csv2(data, filename):
+    with open(filename, 'w', newline='\n',encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile, delimiter=',')
+
+        if type(data) == list:
+            e = data
+        else:
+            e = [data]
+
+        header = list(e[0].keys())
+
+        writer.writerow(header)
+        
+        for element in e:
+            values = []
+            for value in element.values():
+                values.append(value)
+            writer.writerow(values)
+
 def fetch_data():
     global list_results  # Para ser acessado dentro de outras funções
     limit = 100
     page = 1
-    response = pedido(limit, page)
+    url = f"https://api.itjobs.pt/job/list.json?api_key=ee176fa9456283ab9c42f357b036e236&limit={limit}&page={page}"
+    headers = {'User-Agent': "ALPCD_5", 'Cookie': 'itjobs_pt=3cea3cc1f4c6a847f8c459367edf7143:94de45f2a55a15b2672adf8788ac8072e7bfd5c5'}
+    response = request(url, headers)
 
     # Verifica se a resposta contém a chave 'results' ou se não há resposta
     if not response or "results" not in response:
@@ -68,7 +94,8 @@ def fetch_data():
     while page * limit < response["total"]:  # Para limite=100 e total=1261, página vai até 13
         page += 1
         try:  # Caso seja devolvido um dicionário vazio, para não ocorrerem erros
-            new_results = pedido(limit, page)["results"]
+            url = f"https://api.itjobs.pt/job/list.json?api_key=ee176fa9456283ab9c42f357b036e236&limit={limit}&page={page}"
+            new_results = request(url, headers)["results"]
             list_results += new_results  # Lista com todos os resultados que vai incrementando
         except:
             print(f"Erro ao obter resultados da página {page}.")
@@ -185,7 +212,7 @@ def search(localidade: Annotated[str, typer.Argument(help="Localidade a procurar
     
     if export:
         export_to_csv(filtered_jobs, "search.csv")
-        print("Dados exportados para top_jobs.csv")
+        print("Dados exportados para search.csv")
 
 #c)
 @app.command()
@@ -194,7 +221,9 @@ def salary(job_id: Annotated[str, typer.Argument(help="Id do trabalho")]):
     Obtém o salário dum trabalho.
     """
     # Usar a função com retentativa para obter os detalhes do job
-    job_data = pedido(100,1,job_id)
+    url = f"https://api.itjobs.pt/job/get.json?api_key=ee176fa9456283ab9c42f357b036e236&id={job_id}"
+    headers = {'User-Agent': "ALPCD_5", 'Cookie': 'itjobs_pt=3cea3cc1f4c6a847f8c459367edf7143:94de45f2a55a15b2672adf8788ac8072e7bfd5c5'}  # Necessário por 'User-Agent' nos headers
+    job_data = request(url, headers)
     
     if job_data is None:
         print("Não foi possível obter os dados do job. Verifique o job_id e tente novamente.")
@@ -258,8 +287,60 @@ def skills(given_skills:Annotated[List[str], typer.Argument(help="Competências 
 
     if export:
         export_to_csv(results, "skills.csv")
-        print("Dados exportados para top_jobs.csv")
+        print("Dados exportados para skills.csv")
     
+#TP2
+#c)
+@app.command()
+def list_skills(search:Annotated[str, typer.Argument(help="Profissão a procurar")], export: Optional[bool] = False):
+    """
+    Obtém o top10 de competências mais requisitadas para a profissão dada.
+    """
+    search = search.lower().strip()
+    final_search = re.sub(r'\s+', '-', search)
+    url = f"https://www.ambitionbox.com/servicegateway-ambitionbox/jobs-services/v0/jobs/meta?jobProfile={final_search}&pageName=profileJobs"
+    headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:98.0) Gecko/20100101 Firefox/98.0",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Accept-Encoding": "gzip, deflate",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Cache-Control": "max-age=0",
+    "AppId": "931",
+    "SystemId":"ambitionbox-jobs-services"
+    }
+
+    jobProfile = request(url, headers)
+    jobProfileIds = jobProfile["data"]["jobProfileIds"]
+    if jobProfileIds != []:
+        skills = []
+
+        for id in jobProfileIds:
+            url = f"https://www.ambitionbox.com/servicegateway-ambitionbox/jobs-services/v0/jobs/filters?profileIds={id}&isFilterApplied=true"
+            skills += request(url, headers)["filters"]["skills"][:10]
+
+        if len(jobProfileIds) > 1:
+            sorted_skills = sorted(skills, key=lambda x: x['count'], reverse=True)
+            skills = sorted_skills[:10]
+
+        final_skills = []
+        for element in skills:
+            skill = element['name']
+            count = element['count']
+            final_skills.append({'skill':skill,'count':count})
+
+        print(final_skills)
+        if export:
+            export_to_csv2(final_skills, "final_skills.csv")
+            print("Dados exportados para final_skills.csv")
+    else:
+        print("Profissão inexistente em lista.")
+
 
 if __name__ == "__main__":
     app()  # Executa a app Typer
