@@ -1,4 +1,5 @@
 from typing import Optional, List
+from bs4 import BeautifulSoup
 import requests
 import typer
 from typing_extensions import Annotated
@@ -16,12 +17,16 @@ app = typer.Typer()
 list_results = []
 
 # Função para aceder ao URL
-def request(url, headers):
+def request(url, headers, get_soup = False):
     payload = {}
     res = requests.request("GET", url, headers=headers, data=payload)
     if res.status_code == 200:  # Verificar se a resposta foi bem-sucedida (200 OK)
-        results = res.json()
-        return results
+        if get_soup:
+            soup = BeautifulSoup(res.text, "lxml")
+            return soup
+        else:
+            results = res.json()
+            return results
     else:
         print(f"Erro {res.status_code} - {res.text}")
         return {}
