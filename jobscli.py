@@ -377,7 +377,7 @@ def statistics():
     stats = {}
     jobs = request(url_jobs, headers)
     max_page = jobs['pagination']['totalPages']
-    for page in range(1, 5):
+    for page in range(1, max_page+1):
         print(f"A analisar a página {page}.")
         jobs = request(f"https://www.ambitionbox.com/servicegateway-ambitionbox/jobs-services/v0/jobs?isFilterApplied=true&page={page}",headers)
         if jobs == {}:
