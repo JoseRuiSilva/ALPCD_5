@@ -471,58 +471,5 @@ def getd(job_id: Annotated[int, typer.Argument(help="ID do trabalho")], export: 
         export_to_csv2(enriched_data, "get.csv")
         print("Dados exportados para get.csv")
 
-
-@app.command()
-def list_skills(search: Annotated[str, typer.Argument(help="Profissão a procurar")], export: Optional[bool] = False):
-    """
-    Obtém o top 10 de competências mais requisitadas para a profissão dada.
-    """
-    import requests
-    from bs4 import BeautifulSoup
-
-    # Processa o termo de busca
-    search = search.lower().strip()
-    final_search = re.sub(r'\s+', '-', search)
-    url = f"https://www.simplyhired.com/search?q={final_search}"
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:98.0) Gecko/20100101 Firefox/98.0",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Accept-Encoding": "gzip, deflate",
-        "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
-    }
-
-    # Realiza a requisição
-    response = requests.get(url, headers=headers)
-    if response.status_code != 200:
-        print("Erro ao acessar o site SimplyHired.")
-        return
-
-    # Processa o conteúdo HTML
-    soup = BeautifulSoup(response.text, "html.parser")
-    
-    # Extrai as competências relacionadas (exemplo usando seletores fictícios; ajuste conforme o site atual)
-    skills_section = soup.find_all("span", class_="JobCard-tag")  # Exemplo de seletor CSS
-    
-    if not skills_section:
-        print("Nenhuma habilidade encontrada para a profissão especificada.")
-        return
-
-    # Coleta as 10 principais competências
-    skills = []
-    for skill in skills_section[:10]:
-        skills.append({'skill': skill.text.strip(), 'count': None})  # SimplyHired não exibe contagens diretamente
-
-    # Exibe as competências
-    print(skills)
-    
-    # Exporta os dados, se solicitado
-    if export:
-        export_to_csv2(skills, "final_skills.csv")
-        print("Dados exportados para final_skills.csv")
-
-
 if __name__ == "__main__":
     app()
