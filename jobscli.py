@@ -99,7 +99,7 @@ def fetch_data():
     response["results"] = list_results  # Finalmente cria o 'response' com todos os resultados
     print("Finalizado.")
 
-''''''''''
+
 def filter_by_dates_results(list_results, start_date, end_date):    # Função para o d), devolve resultados num intervalo
     sorted_results = sorted(list_results, key=lambda x: x["updatedAt"], reverse=True)   # Organiza os resultados de maior para menor data de atualizacao
     filtered_results = []
@@ -291,84 +291,126 @@ def skills(given_skills:Annotated[List[str], typer.Argument(help="Competências 
 from bs4 import BeautifulSoup
 
 @app.command()
-def get(job_id: Annotated[int, typer.Argument(help="ID do trabalho")]):
+def get(job_id: Annotated[int, typer.Argument(help="ID do trabalho")], export: Optional[bool] = False):
     """
     Busca informações de uma vaga específica (jobID) e enriquece com dados da empresa do AmbitionBox.
     """
-
     # 1. Obter dados da vaga usando a API
-    job_data = pedido(limit=100, page=1, job_id=job_id)
+    url = f"https://api.itjobs.pt/job/get.json?api_key=ee176fa9456283ab9c42f357b036e236&id={job_id}"
+    headers = {'User-Agent': "ALPCD_5", 'Cookie': 'itjobs_pt=3cea3cc1f4c6a847f8c459367edf7143:94de45f2a55a15b2672adf8788ac8072e7bfd5c5'}  # Necessário por 'User-Agent' nos headers
+    job_data = request(url, headers)
     if not job_data:
         print(f"Não foi possível encontrar o jobID {job_id}. Verifique se o ID é válido.")
         return
 
-    # 2. Recolher o nome da empresa para buscar dados no AmbitionBox
+    # 2. Recolher o nome da empresa para procurar dados no AmbitionBox
     company_name = job_data.get("company", {}).get("name", "Desconhecida")
     if company_name == "Desconhecida":
         print("Não foi possível obter o nome da empresa.")
         return
+    modified_company_name = re.sub(r'(.)( *Portugal)(.*)', r"\1", company_name)
 
     # 3. Fazer Web Scraping no AmbitionBox
-    ambitionbox_url = f"https://www.ambitionbox.com/overview/{company_name.replace(' ', '-').lower()}"
+    ambitionbox_url = f"https://www.ambitionbox.com/overview/{re.sub(' ', '-', modified_company_name).lower()}-overview"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Gecko/20100101 Firefox/98.0"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:98.0) Gecko/20100101 Firefox/98.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Cache-Control": "max-age=0",
     }
-    response = requests.get(ambitionbox_url, headers=headers)
-
-    if response.status_code != 200:
-        print(f"Erro ao acessar o AmbitionBox para a empresa '{company_name}'.")
-        return
-
-    soup = BeautifulSoup(response.text, 'html.parser')
+    soup = request(ambitionbox_url, headers, get_soup=True)
 
     # 4. Extrair dados relevantes (ajuste os seletores conforme o HTML do AmbitionBox)
     try:
-        rating = soup.select_one(".rating-value").text.strip()
-        description = soup.select_one(".company-description").text.strip()
-        benefits = soup.select_one(".company-benefits").text.strip()
+        rating = soup.find("span", class_="css-1jxf684 text-primary-text font-pn-700 text-xl !text-base").text
+        description = soup.find("div", class_="text-sm font-pn-400 [&_ul]:list-disc [&_ol]:list-[auto] [&_ul]:ml-5 [&_ol]:ml-5").find("p").text
+        benefits_soup = soup.find_all("div", class_="css-146c3p1 font-pn-600 text-sm text-primary-text")
+        if benefits_soup:
+            benefits = [b.text for b in benefits_soup]
     except AttributeError:
         print("Não foi possível encontrar informações adicionais no AmbitionBox.")
-        rating, description, benefits = "N/A", "N/A", "N/A"
+        rating, description, benefits = "N/A", "N/A", []
 
     # 5. Combinar dados e exibir como JSON
     enriched_data = {
         "id": job_id,
-        "title": job_data.get("title", "N/A"),
+        "title": job_data.get("title"),
         "company_name": company_name,
         "rating": rating,
-        "description": description,
-        "benefits": benefits,
+        "ambition_box_description": description,
+        "ambition_box_benefits": benefits,
     }
-
-    print("Dados do Job:")
-    print(json.dumps(enriched_data, indent=4, ensure_ascii=False))
-
+    print(enriched_data)
+    if export:
+        export_to_csv2(enriched_data, "get.csv")
+        print("Dados exportados para get.csv")
 #b)
 @app.command()
 def statistics():
     """
     Gera estatísticas de vagas agrupadas por Zona e Tipo de Trabalho em um CSV.
     """
-    if not list_results:
-        fetch_data()
+    url_jobs = f"https://www.ambitionbox.com/servicegateway-ambitionbox/jobs-services/v0/jobs?isFilterApplied=true&page=1"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:98.0) Gecko/20100101 Firefox/98.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Cache-Control": "max-age=0",
+        "AppId": "931",
+        "SystemId":"ambitionbox-jobs-services"
+        }
 
-    # Agrupando vagas por zona e tipo de trabalho
     stats = {}
-    for job in list_results:
-        zone = ", ".join(loc["name"] for loc in job.get("locations", [])) or "Desconhecida"
-        job_type = ", ".join(t["name"] for t in job.get("types", [])) or "Desconhecido"
-        key = (zone, job_type)
-        stats[key] = stats.get(key, 0) + 1
+    jobs = request(url_jobs, headers)
+    max_page = jobs['pagination']['totalPages']
+    for page in range(1, 5):
+        print(f"A analisar a página {page}.")
+        jobs = request(f"https://www.ambitionbox.com/servicegateway-ambitionbox/jobs-services/v0/jobs?isFilterApplied=true&page={page}",headers)
+        if jobs == {}:
+            break
+        jobs = jobs['jobs']
+        if page == 1:
+            jobs = jobs[1:]
+
+        for job in jobs:
+            job_id = job['jobId']
+            job_info = request(f"https://www.ambitionbox.com/servicegateway-ambitionbox/jobs-services/v0/jobs/info/{job_id}", headers)
+            if job_info == {}:
+                continue
+
+            job_info = job_info['data']
+            job_type = job_info['jobProfile']
+            locations = job_info['locations']
+            vacancies = job_info['vacancies']
+            for zone in locations:
+                key = (zone, job_type)
+                stats[key] = stats.get(key, 0) + vacancies
+
+    sorted_stats = dict(sorted(stats.items(), key=lambda item: item[1], reverse=True))
 
     filename = "job_statistics.csv"
     with open(filename, "w", newline="", encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(["Zona", "Tipo de Trabalho", "Número de Vagas"])
-        for (zone, job_type), count in stats.items():
+        writer.writerow(["Zona", "Tipo de Trabalho", "Nº de Vagas"])
+        for (zone, job_type), count in sorted_stats.items():
             writer.writerow([zone, job_type, count])
 
-    print(f"Ficheiro '{filename}' criado com sucesso.")
-'''''
+    print(f"Ficheiro '{filename}' criado com sucesso.")
+
 #c)
 @app.command()
 def list_skills(search:Annotated[str, typer.Argument(help="Profissão a procurar")], export: Optional[bool] = False):
@@ -420,7 +462,7 @@ def list_skills(search:Annotated[str, typer.Argument(help="Profissão a procurar
     else:
         print("Profissão inexistente em lista.")
 
-# d)
+#d)
 @app.command()
 def getd(job_id: Annotated[int, typer.Argument(help="ID do trabalho")], export: Optional[bool] = False):
 
