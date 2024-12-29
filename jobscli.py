@@ -417,6 +417,58 @@ def list_skills(search:Annotated[str, typer.Argument(help="Profissão a procurar
     else:
         print("Profissão inexistente em lista.")
 
+# d)
+@app.command()
+def get(job_id: Annotated[int, typer.Argument(help="ID do trabalho")], export: Optional[bool] = False):
+
+    # 1. Obter dados da vaga usando a API
+    url = f"https://api.itjobs.pt/job/get.json?api_key=ee176fa9456283ab9c42f357b036e236&id={job_id}"
+    headers = {'User-Agent': "ALPCD_5", 'Cookie': 'itjobs_pt=3cea3cc1f4c6a847f8c459367edf7143:94de45f2a55a15b2672adf8788ac8072e7bfd5c5'}  # Necessário por 'User-Agent' nos headers
+    job_data = request(url, headers)
+    if not job_data:
+        print(f"Não foi possível encontrar o jobID {job_id}. Verifique se o ID é válido.")
+        return
+
+    # 2. Recolher o nome da empresa para procurar dados no SimplyHired
+    company_name = job_data.get("company", {}).get("name", "Desconhecida")
+    if company_name == "Desconhecida":
+        print("Não foi possível obter o nome da empresa.")
+        return
+    modified_company_name = re.sub(r'(.)( *Portugal)(.*)', r"\1", company_name)
+
+    # 3. Fazer Web Scraping no SimplyHired
+# 3. Fazer Web Scraping no SimplyHired
+    url = f"https://www.simplyhired.com/_next/data/XJuAWs-VlRLF8qpN2iQ1H/en-US/search.json?q={re.sub(' ', '+', modified_company_name).lower()}"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:98.0) Gecko/20100101 Firefox/98.0"}
+    response = request(url, headers)
+
+    # 4. Extrair dados relevantes (ajuste os seletores conforme o HTML do SimplyHired)
+    try:
+        employer_info = response['pageProps']['viewJobData']
+        rating = employer_info['employerOverallRating']
+        description = employer_info['jobDescriptionHtml']
+        benefits = employer_info['benefits']
+
+        description = BeautifulSoup(description, "html.parser").get_text(strip=True)
+
+    except:
+        print("Não foi possível encontrar informações adicionais no SimplyHired.")
+        rating, description, benefits = "N/A", "N/A", []
+
+
+    enriched_data = {
+        "id": job_id,
+        "title": job_data.get("title"),
+        "company_name": company_name,
+        "rating": rating,
+        "simplyhired_description": description,
+        "simplyhired_benefits": benefits,
+    }
+    print(json.dumps(enriched_data, indent=4))
+
+    if export:
+        export_to_csv2(enriched_data, "get.csv")
+        print("Dados exportados para get.csv")
 
 if __name__ == "__main__":
-    app()  # Executa a app Typer
+    app()
