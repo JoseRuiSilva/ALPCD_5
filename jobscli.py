@@ -4,6 +4,7 @@ import requests
 import typer
 from typing_extensions import Annotated
 import re
+import json
 #import spacy
 #from spacy.matcher import PhraseMatcher
 #from skillNer.general_params import SKILL_DB # type: ignore
@@ -98,6 +99,7 @@ def fetch_data():
     response["results"] = list_results  # Finalmente cria o 'response' com todos os resultados
     print("Finalizado.")
 
+''''''''''
 def filter_by_dates_results(list_results, start_date, end_date):    # Função para o d), devolve resultados num intervalo
     sorted_results = sorted(list_results, key=lambda x: x["updatedAt"], reverse=True)   # Organiza os resultados de maior para menor data de atualizacao
     filtered_results = []
@@ -283,7 +285,7 @@ def skills(given_skills:Annotated[List[str], typer.Argument(help="Competências 
     if export:
         export_to_csv(results, "skills.csv")
         print("Dados exportados para skills.csv")
-    
+
 #TP2
 #a)
 from bs4 import BeautifulSoup
@@ -366,6 +368,7 @@ def statistics():
             writer.writerow([zone, job_type, count])
 
     print(f"Ficheiro '{filename}' criado com sucesso.")
+'''''
 #c)
 @app.command()
 def list_skills(search:Annotated[str, typer.Argument(help="Profissão a procurar")], export: Optional[bool] = False):
@@ -419,9 +422,9 @@ def list_skills(search:Annotated[str, typer.Argument(help="Profissão a procurar
 
 # d)
 @app.command()
-def get(job_id: Annotated[int, typer.Argument(help="ID do trabalho")], export: Optional[bool] = False):
+def getd(job_id: Annotated[int, typer.Argument(help="ID do trabalho")], export: Optional[bool] = False):
 
-    # 1. Obter dados da vaga usando a API
+    # Dados da vaga 
     url = f"https://api.itjobs.pt/job/get.json?api_key=ee176fa9456283ab9c42f357b036e236&id={job_id}"
     headers = {'User-Agent': "ALPCD_5", 'Cookie': 'itjobs_pt=3cea3cc1f4c6a847f8c459367edf7143:94de45f2a55a15b2672adf8788ac8072e7bfd5c5'}  # Necessário por 'User-Agent' nos headers
     job_data = request(url, headers)
@@ -429,16 +432,14 @@ def get(job_id: Annotated[int, typer.Argument(help="ID do trabalho")], export: O
         print(f"Não foi possível encontrar o jobID {job_id}. Verifique se o ID é válido.")
         return
 
-    # 2. Recolher o nome da empresa para procurar dados no SimplyHired
+    # 2. Nome da empresa 
     company_name = job_data.get("company", {}).get("name", "Desconhecida")
     if company_name == "Desconhecida":
         print("Não foi possível obter o nome da empresa.")
         return
     modified_company_name = re.sub(r'(.)( *Portugal)(.*)', r"\1", company_name)
 
-    # 3. Fazer Web Scraping no SimplyHired
-# 3. Fazer Web Scraping no SimplyHired
-    url = f"https://www.simplyhired.com/_next/data/XJuAWs-VlRLF8qpN2iQ1H/en-US/search.json?q={re.sub(' ', '+', modified_company_name).lower()}"
+    url = f"https://www.simplyhired.pt/_next/data/XJuAWs-VlRLF8qpN2iQ1H/pt-PT/search.json?q={re.sub(' ', '+', modified_company_name).lower()}"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:98.0) Gecko/20100101 Firefox/98.0"}
     response = request(url, headers)
 
@@ -469,6 +470,59 @@ def get(job_id: Annotated[int, typer.Argument(help="ID do trabalho")], export: O
     if export:
         export_to_csv2(enriched_data, "get.csv")
         print("Dados exportados para get.csv")
+
+
+@app.command()
+def list_skills(search: Annotated[str, typer.Argument(help="Profissão a procurar")], export: Optional[bool] = False):
+    """
+    Obtém o top 10 de competências mais requisitadas para a profissão dada.
+    """
+    import requests
+    from bs4 import BeautifulSoup
+
+    # Processa o termo de busca
+    search = search.lower().strip()
+    final_search = re.sub(r'\s+', '-', search)
+    url = f"https://www.simplyhired.com/search?q={final_search}"
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:98.0) Gecko/20100101 Firefox/98.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+    }
+
+    # Realiza a requisição
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        print("Erro ao acessar o site SimplyHired.")
+        return
+
+    # Processa o conteúdo HTML
+    soup = BeautifulSoup(response.text, "html.parser")
+    
+    # Extrai as competências relacionadas (exemplo usando seletores fictícios; ajuste conforme o site atual)
+    skills_section = soup.find_all("span", class_="JobCard-tag")  # Exemplo de seletor CSS
+    
+    if not skills_section:
+        print("Nenhuma habilidade encontrada para a profissão especificada.")
+        return
+
+    # Coleta as 10 principais competências
+    skills = []
+    for skill in skills_section[:10]:
+        skills.append({'skill': skill.text.strip(), 'count': None})  # SimplyHired não exibe contagens diretamente
+
+    # Exibe as competências
+    print(skills)
+    
+    # Exporta os dados, se solicitado
+    if export:
+        export_to_csv2(skills, "final_skills.csv")
+        print("Dados exportados para final_skills.csv")
+
 
 if __name__ == "__main__":
     app()
