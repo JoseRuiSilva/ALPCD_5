@@ -29,7 +29,7 @@ def request(url, headers, get_soup = False):
             results = res.json()
             return results
     else:
-        print(f"Erro {res.status_code} - {res.text}")
+        print(f"Erro {res.status_code}.")
         return {}
 
 # Função para exportar dados para CSV
@@ -288,7 +288,6 @@ def skills(given_skills:Annotated[List[str], typer.Argument(help="Competências 
 
 #TP2
 #a)
-from bs4 import BeautifulSoup
 
 @app.command()
 def get(job_id: Annotated[int, typer.Argument(help="ID do trabalho")], export: Optional[bool] = False):
@@ -441,11 +440,11 @@ def list_skills(search:Annotated[str, typer.Argument(help="Profissão a procurar
     if jobProfileIds != []:
         skills = []
 
-        for id in jobProfileIds:
+        for id in jobProfileIds:    # Como os ids aparecem em lista, é possivel que hajam profissões com vários ids associados
             url = f"https://www.ambitionbox.com/servicegateway-ambitionbox/jobs-services/v0/jobs/filters?profileIds={id}&isFilterApplied=true"
             skills += request(url, headers)["filters"]["skills"][:10]
 
-        if len(jobProfileIds) > 1:
+        if len(jobProfileIds) > 1:  #se só houver 1 id, as skills já vêm ordenadas
             sorted_skills = sorted(skills, key=lambda x: x['count'], reverse=True)
             skills = sorted_skills[:10]
 
